@@ -1,3 +1,3 @@
 # Coursera-blockchain-assignment
 
-completed assignment 100%
+completed assignment 100% 
