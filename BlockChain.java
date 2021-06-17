@@ -1,10 +1,10 @@
-package blockchain;
-// Block Chain should maintain only limited block nodes to satisfy the functions
-// You should not have all the blocks added to the block chain in memory 
+//package blockchain;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 
+// Block Chain should maintain only limited block nodes to satisfy the functions
+// You should not have all the blocks added to the block chain in memory 
 // as it would cause a memory overflow.
 
 public class BlockChain {
@@ -13,7 +13,7 @@ public class BlockChain {
     public Block maxHeightBlock;
     public UTXOPool maxUtxoPool = new UTXOPool();
     public TransactionPool txPool = new TransactionPool();
-    public ArrayList<BlockNode> currentBlockNodes = new ArrayList<>();
+    public ArrayList<BlockNode> currentBlockChain = new ArrayList<>();
     public int maxHeight = 0;
     
     
@@ -25,28 +25,19 @@ public class BlockChain {
         private byte[] blockHash;
         private byte[] parentBlockHash;
         private UTXOPool nodeUtxoPool;
-        private TransactionPool nodeTxPool;
+        
         
         public BlockNode(Block b){
             block = b;
             blockHash = block.getHash();
             parentBlockHash = block.getPrevBlockHash();
-            
-            
         }
-        
-        //placeholder for genesis block node
+
         public BlockNode(Block genesisBlock, int h){
             block = genesisBlock;
             blockHash = block.getHash();
             height = h;
         }
-//        
-//        public void setHeight(){
-//            if(block.getPrevBlockHash() >){
-//                
-//            }
-//        }
         
         public void setHeight(int h){
             height = h;
@@ -68,22 +59,13 @@ public class BlockChain {
            return parentBlockHash;
        }
        
-       public void setUtxoPool(UTXOPool pool){
+       public void setNodeUtxoPool(UTXOPool pool){
            nodeUtxoPool = pool;
        }
         
        public UTXOPool getNodeUtxoPool(){
            return nodeUtxoPool;
-       }
-       
-       public void setTxPool(TransactionPool t){
-           nodeTxPool = t;
-       }
-       
-       public TransactionPool getTxPool(){
-           return nodeTxPool;
-       }
-        
+       } 
         
     }
     /**
@@ -96,19 +78,19 @@ public class BlockChain {
         // IMPLEMENT THIS
         maxHeightBlock = genesisBlock;
         maxHeight = 1;
-//        TransactionPool genTxPool = new TransactionPool();
+        
+        //initialized utxo pool for the genesis block
         UTXOPool genUtxoPool = new UTXOPool();
-        ArrayList<Transaction> genTxs = genesisBlock.getTransactions();
-        Transaction coinbaseTx = genesisBlock.getCoinbase();
 
-        //Add genesis coinbase tx to txPool and UTXO pool
-//        genTxPool.addTransaction(coinbaseTx);
+        //Add genesis coinbase tx to UTXO pool
+        Transaction coinbaseTx = genesisBlock.getCoinbase();
         for(int i = 0; i < coinbaseTx.numOutputs(); i++){
             UTXO coinbaseUtxo = new UTXO(coinbaseTx.getHash(), i);
             genUtxoPool.addUTXO(coinbaseUtxo, coinbaseTx.getOutput(i));
         }
         
-        //add rest of txs to pools
+        //add the rest of txs to utxo pool
+        ArrayList<Transaction> genTxs = genesisBlock.getTransactions();
         for(Transaction tx: genTxs){
             if(tx != null){
                 for(int i = 0; i < tx.numOutputs(); i++){
@@ -116,14 +98,13 @@ public class BlockChain {
                     UTXO utxo = new UTXO(tx.getHash(), i);
                     genUtxoPool.addUTXO(utxo, output);
                 }
-//                genTxPool.addTransaction(tx);
             }
         }
         
+        //Create block node and add it to the blockchain
         BlockNode genBlockNode = new BlockNode(genesisBlock, 1);
-        genBlockNode.setUtxoPool(genUtxoPool);
-//        genBlockNode.setTxPool(genTxPool);
-        currentBlockNodes.add(genBlockNode);
+        genBlockNode.setNodeUtxoPool(genUtxoPool);
+        currentBlockChain.add(genBlockNode);
 
     }
 
@@ -159,58 +140,57 @@ public class BlockChain {
      */
     public boolean addBlock(Block block) {
         // IMPLEMENT THIS
+        
+        //returns false if prevBlock pointer is null
         if(isGenesisBlock(block)){
             return false;
         }
-        
-        
-        
-        //Get the tx pool from the block were building on top of
+
+        //Get the tx pool from the block we're building on top of
         BlockNode parentBlockNode = getBlockNodeFromHash(block.getPrevBlockHash());
-        if(!currentBlockNodes.contains(parentBlockNode))
+        if(!currentBlockChain.contains(parentBlockNode))
             return false;
         
+        //get utxo pool from previous block
         UTXOPool parentUtxoPool;
-        
         if(parentBlockNode.getNodeUtxoPool() != null){
             parentUtxoPool = parentBlockNode.getNodeUtxoPool();
         } else {
             return false;
         }
         
-        
+        //tx handler will take utxo pool from previous block and use that to validate current blocks tx's
         TxHandler handler = new TxHandler(parentUtxoPool);
         
-        //Get array of tx from current block
+        //Get txs from current block and check if valid
         Transaction[] blockTxs = block.getTransactions().toArray(new Transaction[block.getTransactions().size()]);
         Transaction[] validatedTxs = handler.handleTxs(blockTxs);
         if(validatedTxs.length != blockTxs.length){
             return false;
         }
-        
-//        TransactionPool nodeTxPool = new TransactionPool();
-        
-        
+ 
+        //add validated txs to blockchain tx pool
         for(int i = 0; i < validatedTxs.length; i++){
-//            nodeTxPool.addTransaction(validatedTxs[i]);
             addTransaction(validatedTxs[i]);
         }
+        
+        //tx handler will return updated utxo pool, after .handleTxs(blockTxs)
         UTXOPool newUtxoPool = handler.getUTXOPool();
+        
+        //remember to add coinbase tx to utxo pool
         Transaction blockCoinbase = block.getCoinbase();
         for(int i =0; i <blockCoinbase.numOutputs(); i++){
             UTXO coinbaseUtxo = new UTXO(blockCoinbase.getHash(), i);
             newUtxoPool.addUTXO(coinbaseUtxo, blockCoinbase.getOutput(i));
         }
         
-        
-        
+        //prepare new block node and add it to the blockchain
         BlockNode newBlockNode = new BlockNode(block);
-        newBlockNode.setUtxoPool(newUtxoPool);
-//        newBlockNode.setTxPool(nodeTxPool);
+        newBlockNode.setNodeUtxoPool(newUtxoPool);
         newBlockNode.setHeight(parentBlockNode.getHeight() + 1);
-        currentBlockNodes.add(newBlockNode);
+        currentBlockChain.add(newBlockNode);
         
-        //remove confirmed txs from txpool
+        //remove processed txs from txpool
         for(int i = 0; i < blockTxs.length; i++){
             txPool.removeTransaction(blockTxs[i].getHash());
         }
@@ -221,7 +201,10 @@ public class BlockChain {
             maxHeight = newBlockNode.getHeight();
             maxUtxoPool = newBlockNode.getNodeUtxoPool();
         }
+        
+        //remove old blocks from blockchain
         updateBlockNodes();
+        
         return true;
     }
     
@@ -236,6 +219,8 @@ public class BlockChain {
     /** Add a transaction to the transaction pool */
     public void addTransaction(Transaction tx) {
         // IMPLEMENT THIS
+        
+        //tx pool is used by TxHandler to process all new txs
         txPool.addTransaction(tx);
         
     }
@@ -247,14 +232,14 @@ public class BlockChain {
         int minimumHeight = maxHeightBlockNode.getHeight() - CUT_OFF_AGE;
         ArrayList<BlockNode> removableBlocks = new ArrayList<>();
         if(minimumHeight > 0){
-            for(BlockNode b: currentBlockNodes){
+            for(BlockNode b: currentBlockChain){
                 if(b.getHeight() < minimumHeight){
                     removableBlocks.add(b);
                 }
             }
         }
         for(BlockNode b: removableBlocks){
-            currentBlockNodes.remove(b);
+            currentBlockChain.remove(b);
         }
     }
     
@@ -267,7 +252,7 @@ public class BlockChain {
     //Get BlockNode from current BlockNode array
     public BlockNode getBlockNodeFromHash(byte[] blockHash){
         
-        for(BlockNode b: currentBlockNodes){
+        for(BlockNode b: currentBlockChain){
             if(Arrays.equals(b.getHash(), blockHash)){
                 return b;
             } 
